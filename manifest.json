@@ -1,0 +1,59 @@
+{
+  "manifest_version": "0.3",
+  "name": "pathmode",
+  "display_name": "Pathmode",
+  "version": "1.1.0",
+  "description": "Connect AI agents to your Intent Layer. Get strategic context, dependency graphs, and implementation prompts.",
+  "long_description": "Pathmode MCP Server connects Claude Code, Cursor, and other AI agents to your product team's Intent Layer. AI agents get structured specifications (objectives, outcomes, constraints, edge cases), dependency graph analysis (critical path, bottlenecks, cycles), and workspace strategy context \u2014 so they build the right thing, not just any thing.",
+  "author": {
+    "name": "Pathmode",
+    "url": "https://pathmode.io"
+  },
+  "homepage": "https://pathmode.io",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pathmodeio/mcp-server"
+  },
+  "documentation": "https://github.com/pathmodeio/mcp-server#readme",
+  "support": "https://github.com/pathmodeio/mcp-server/issues",
+  "license": "MIT",
+  "keywords": [
+    "pathmode",
+    "intent-engineering",
+    "product-development",
+    "dependency-graph",
+    "ai-agents",
+    "strategic-planning"
+  ],
+  "privacy_policies": [
+    "https://pathmode.io/privacy"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "npx",
+      "args": ["@pathmode/mcp-server"],
+      "env": {
+        "PATHMODE_API_KEY": "${user_config.api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Pathmode API Key",
+      "description": "Your Pathmode API key (starts with pm_live_). Get one from Settings > API Keys in the Pathmode app.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "tools_generated": true,
+  "prompts_generated": true
+}

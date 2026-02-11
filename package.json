@@ -1,0 +1,54 @@
+{
+  "name": "@pathmode/mcp-server",
+  "version": "1.1.0",
+  "description": "Pathmode MCP Server — Connect Claude Code, Cursor, and AI agents to your Intent Layer. Get strategic context, dependency graphs, and implementation prompts.",
+  "main": "dist/index.js",
+  "bin": {
+    "pathmode-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "manifest.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "ncc build src/index.ts -o dist",
+    "dev": "ts-node src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "pathmode",
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "cursor",
+    "windsurf",
+    "intent-engineering",
+    "ai-agents",
+    "product-development",
+    "dependency-graph",
+    "strategic-planning"
+  ],
+  "author": "Pathmode",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pathmodeio/mcp-server.git"
+  },
+  "homepage": "https://pathmode.io",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "gray-matter": "^4.0.3",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.1.0",
+    "@vercel/ncc": "^0.38.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
