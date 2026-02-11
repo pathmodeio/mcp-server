@@ -237,7 +237,7 @@ This MCP server connects to the Pathmode API (`pathmode.io`) to read and write i
 ## Support
 
 - Issues: [github.com/pathmodeio/mcp-server/issues](https://github.com/pathmodeio/mcp-server/issues)
-- Documentation: [pathmode.io/docs](https://pathmode.io/docs)
+- Documentation: [github.com/pathmodeio/mcp-server](https://github.com/pathmodeio/mcp-server#readme)
 
 ## License
 
