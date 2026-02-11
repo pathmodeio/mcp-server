@@ -17,6 +17,7 @@
   "documentation": "https://github.com/pathmodeio/mcp-server#readme",
   "support": "https://github.com/pathmodeio/mcp-server/issues",
   "license": "MIT",
+  "icon": "icon.svg",
   "keywords": [
     "pathmode",
     "intent-engineering",
