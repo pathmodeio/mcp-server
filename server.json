@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.pathmodeio/mcp-server",
+  "description": "Build intent specs via Socratic AI conversation. Connect to your Intent Layer for context.",
+  "repository": {
+    "url": "https://github.com/pathmodeio/mcp-server",
+    "source": "github"
+  },
+  "version": "1.2.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@pathmode/mcp-server",
+      "version": "1.2.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "Optional: Your Pathmode API key for team features (dependency graph, workspace context). Get one from Settings > API Keys in the Pathmode app.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true,
+          "name": "PATHMODE_API_KEY"
+        }
+      ]
+    }
+  ]
+}
