@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.tgz
+*.mcpb
 
 # MCP Registry publisher
 mcp-publisher
