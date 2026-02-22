@@ -1,6 +1,6 @@
 {
   "name": "@pathmode/mcp-server",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Pathmode MCP Server — Build structured intent specs through Socratic AI conversation (zero-config), or connect to your Intent Layer for strategic context, dependency graphs, and implementation prompts.",
   "main": "dist/index.js",
   "bin": {
