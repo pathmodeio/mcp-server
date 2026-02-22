@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "pathmode",
   "display_name": "Pathmode",
-  "version": "1.1.0",
-  "description": "Connect AI agents to your Intent Layer. Get strategic context, dependency graphs, and implementation prompts.",
-  "long_description": "Pathmode MCP Server connects Claude Code, Cursor, and other AI agents to your product team's Intent Layer. AI agents get structured specifications (objectives, outcomes, constraints, edge cases), dependency graph analysis (critical path, bottlenecks, cycles), and workspace strategy context \u2014 so they build the right thing, not just any thing.",
+  "version": "1.2.0",
+  "description": "Build structured intent specs through Socratic AI conversation, or connect to your Intent Layer for strategic context and dependency graphs.",
+  "long_description": "Pathmode MCP Server includes the Intent Compiler — a zero-config Socratic conversation that helps you build structured intent specs (objectives, outcomes, constraints, edge cases) right in Claude Code. No signup needed. For teams, connect to your Pathmode workspace for dependency graph analysis (critical path, bottlenecks, cycles), workspace strategy context, and governance — so AI agents build the right thing, not just any thing.",
   "author": {
     "name": "Pathmode",
     "url": "https://pathmode.io"
@@ -21,6 +21,7 @@
   "keywords": [
     "pathmode",
     "intent-engineering",
+    "intent-compiler",
     "product-development",
     "dependency-graph",
     "ai-agents",
@@ -44,9 +45,9 @@
     "api_key": {
       "type": "string",
       "title": "Pathmode API Key",
-      "description": "Your Pathmode API key (starts with pm_live_). Get one from Settings > API Keys in the Pathmode app.",
+      "description": "Optional. Your Pathmode API key (starts with pm_live_) for team features. The Intent Compiler works without it. Get a key from Settings > API Keys in the Pathmode app.",
       "sensitive": true,
-      "required": true
+      "required": false
     }
   },
   "compatibility": {

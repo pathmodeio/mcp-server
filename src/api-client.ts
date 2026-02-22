@@ -23,12 +23,11 @@ export interface ApiIntent {
     version: number;
     objective: string;
     problemSeverity?: string;
-    userGoal: string;
+    title: string;
     outcomes: string[];
     healthMetrics: string[];
     strategicAlignment?: string;
     alignmentNotes?: string;
-    preconditions: Record<string, any>;
     context: Record<string, any>;
     constraints: string[];
     verification: Record<string, any>;
@@ -133,12 +132,20 @@ export class PathmodeClient {
         return res.json() as Promise<{ prompt: string; json: object }>;
     }
 
-    async updateIntentStatus(id: string, status: string): Promise<any> {
+    async updateIntentStatus(id: string, status: string): Promise<{
+        id: string;
+        status: string;
+        updatedAt: string;
+        shippedAt?: string;
+        verifiedAt?: string;
+        verificationChecklist?: { text: string; category: string }[];
+        verificationChecklistCount?: number;
+    }> {
         const res = await this.fetch(`/intents/${id}/status`, {
             method: 'PATCH',
             body: JSON.stringify({ status }),
         });
-        return res.json();
+        return res.json() as any;
     }
 
     async logNote(intentId: string, note: string, source = 'mcp'): Promise<any> {

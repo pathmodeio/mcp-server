@@ -12,7 +12,7 @@ export interface LocalIntent {
     status: string;
     version: number;
     objective: string;
-    userGoal: string;
+    title: string;
     stageName?: string;
     severity?: string;
     outcomes: string[];
@@ -68,7 +68,7 @@ function readIntentFile(filePath: string): LocalIntent | null {
             status: data.status || 'draft',
             version: data.version || 1,
             objective: data.objective || extractSection(body, 'Objective') || '',
-            userGoal: data.userGoal || extractTitle(body) || 'Untitled Intent',
+            title: data.title || data.userGoal || extractTitle(body) || 'Untitled Intent',
             stageName: data.stage || undefined,
             severity: data.severity || undefined,
             outcomes,

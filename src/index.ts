@@ -8,13 +8,15 @@
  *   npx @pathmode/mcp-server            # Cloud mode (uses ~/.pathmode/config.json)
  *   npx @pathmode/mcp-server --local     # Local mode (reads intent.md from cwd)
  *
+ * The Intent Compiler (compile-intent prompt, intent_save, intent_export tools)
+ * works without an API key — zero-config intent spec building in Claude Code.
+ *
  * Add to .claude/settings.json:
  *   {
  *     "mcpServers": {
  *       "pathmode": {
  *         "command": "npx",
- *         "args": ["@pathmode/mcp-server"],
- *         "env": { "PATHMODE_API_KEY": "pm_live_..." }
+ *         "args": ["@pathmode/mcp-server"]
  *       }
  *     }
  *   }
@@ -23,8 +25,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { resolve } from 'path';
+import { writeFileSync, readFileSync } from 'fs';
 import { PathmodeClient, loadConfig } from './api-client';
 import { readLocalIntents } from './local-reader';
+import { getCompileIntentPrompt, formatIntentMd, formatCursorRules, formatClaudeMdSection } from './intent-compiler';
 
 const isLocalMode = process.argv.includes('--local');
 
@@ -32,16 +37,10 @@ let client: PathmodeClient | null = null;
 
 if (!isLocalMode) {
     const config = loadConfig();
-    if (!config) {
-        console.error(
-            'No Pathmode configuration found. Either:\n' +
-            '  1. Run `intentspec login` to configure\n' +
-            '  2. Set PATHMODE_API_KEY environment variable\n' +
-            '  3. Use --local flag for offline mode'
-        );
-        process.exit(1);
+    if (config) {
+        client = new PathmodeClient(config);
     }
-    client = new PathmodeClient(config);
+    // No exit — Intent Compiler tools work without an API key
 }
 
 // ============================================================
@@ -50,7 +49,7 @@ if (!isLocalMode) {
 
 const server = new McpServer({
     name: 'pathmode',
-    version: '1.1.0',
+    version: '1.2.0',
 });
 
 // Annotation presets
@@ -168,7 +167,7 @@ server.registerTool(
                 type: 'text',
                 text: JSON.stringify({
                     intentId: intent.id,
-                    userGoal: intent.userGoal,
+                    title: intent.title,
                     relations: intent.relations,
                 }, null, 2)
             }]
@@ -192,7 +191,7 @@ server.registerTool(
             const intents = readLocalIntents();
             const q = query.toLowerCase();
             const matches = intents.filter(i => {
-                const text = [i.userGoal, i.objective, ...i.outcomes, ...i.constraints].join(' ').toLowerCase();
+                const text = [i.title, i.objective, ...i.outcomes, ...i.constraints].join(' ').toLowerCase();
                 return text.includes(q) && (!status || i.status === status);
             });
             return { content: [{ type: 'text', text: JSON.stringify({ results: matches, count: matches.length, query }, null, 2) }] };
@@ -202,12 +201,12 @@ server.registerTool(
             const intents = await client!.listIntents(status);
             const q = query.toLowerCase();
             const matches = intents.filter(i => {
-                const text = [i.userGoal, i.objective, ...(i.outcomes || []), ...(i.constraints || [])].join(' ').toLowerCase();
+                const text = [i.title, i.objective, ...(i.outcomes || []), ...(i.constraints || [])].join(' ').toLowerCase();
                 return text.includes(q);
             });
             const results = matches.map(i => ({
                 id: i.id,
-                userGoal: i.userGoal,
+                title: i.title,
                 objective: i.objective,
                 status: i.status,
                 stageName: i.stageName,
@@ -320,11 +319,11 @@ server.registerTool(
             }
 
             // Bottlenecks
-            const bottlenecks: { id: string; userGoal: string; dependentCount: number; status: string }[] = [];
+            const bottlenecks: { id: string; title: string; dependentCount: number; status: string }[] = [];
             for (const [id, dependents] of reverse) {
                 if (dependents.size >= 3) {
                     const spec = specMap.get(id);
-                    bottlenecks.push({ id, userGoal: spec?.userGoal || 'Untitled', dependentCount: dependents.size, status: spec?.status || 'unknown' });
+                    bottlenecks.push({ id, title: spec?.title || 'Untitled', dependentCount: dependents.size, status: spec?.status || 'unknown' });
                 }
             }
 
@@ -343,7 +342,7 @@ server.registerTool(
             if (type === 'critical-path') {
                 const pathDetails = criticalPath.map(id => {
                     const s = specMap.get(id);
-                    return { id, userGoal: s?.userGoal || 'Untitled', status: s?.status || 'unknown' };
+                    return { id, title: s?.title || 'Untitled', status: s?.status || 'unknown' };
                 });
                 return { content: [{ type: 'text', text: JSON.stringify({ criticalPath: pathDetails, length: criticalPath.length }, null, 2) }] };
             }
@@ -351,12 +350,12 @@ server.registerTool(
             if (type === 'risks') {
                 const risks: { type: string; severity: string; message: string }[] = [];
                 for (const cycle of cycles) {
-                    const names = cycle.slice(0, -1).map(id => specMap.get(id)?.userGoal || 'Untitled');
+                    const names = cycle.slice(0, -1).map(id => specMap.get(id)?.title || 'Untitled');
                     risks.push({ type: 'cycle', severity: 'critical', message: `Circular dependency: ${names.join(' \u2192 ')}` });
                 }
                 for (const b of bottlenecks) {
                     const isDraft = b.status === 'draft' || b.status === 'validated';
-                    risks.push({ type: 'bottleneck', severity: isDraft ? 'critical' : 'warning', message: `"${b.userGoal}" blocks ${b.dependentCount} intents${isDraft ? ` and is still ${b.status}` : ''}` });
+                    risks.push({ type: 'bottleneck', severity: isDraft ? 'critical' : 'warning', message: `"${b.title}" blocks ${b.dependentCount} intents${isDraft ? ` and is still ${b.status}` : ''}` });
                 }
                 return { content: [{ type: 'text', text: JSON.stringify({ risks }, null, 2) }] };
             }
@@ -366,9 +365,9 @@ server.registerTool(
                 summary: { total: intents.length, statusDistribution: statusDist },
                 criticalPath: criticalPath.map(id => {
                     const s = specMap.get(id);
-                    return { id, userGoal: s?.userGoal || 'Untitled', status: s?.status || 'unknown' };
+                    return { id, title: s?.title || 'Untitled', status: s?.status || 'unknown' };
                 }),
-                cycles: cycles.map(c => c.slice(0, -1).map(id => ({ id, userGoal: specMap.get(id)?.userGoal || 'Untitled' }))),
+                cycles: cycles.map(c => c.slice(0, -1).map(id => ({ id, title: specMap.get(id)?.title || 'Untitled' }))),
                 bottlenecks,
                 orphanCount: orphans.length,
             };
@@ -483,7 +482,7 @@ server.registerTool(
     'update_intent_status',
     {
         title: 'Update Intent Status',
-        description: 'Update the status of an intent. Use this to mark an intent as shipped after implementation, or verified after testing.',
+        description: 'Update the status of an intent. Use this to mark an intent as shipped after implementation, or verified after testing. For shipped/verified transitions, the response includes a verification checklist of outcomes, constitution rules, and health metrics that should be confirmed.',
         inputSchema: {
             intentId: z.string().describe('The intent ID to update'),
             status: z.enum(['draft', 'validated', 'approved', 'shipped', 'verified']).describe('The new status'),
@@ -496,10 +495,22 @@ server.registerTool(
         }
 
         const result = await client!.updateIntentStatus(intentId, status);
+
+        let responseText = `Intent ${intentId} status updated to "${status}".`;
+
+        // Surface verification checklist for shipped/verified transitions
+        if (result.verificationChecklist && result.verificationChecklist.length > 0) {
+            responseText += `\n\nVerification Checklist (${result.verificationChecklistCount} items to verify):`;
+            for (const item of result.verificationChecklist) {
+                responseText += `\n  [ ] [${item.category}] ${item.text}`;
+            }
+            responseText += `\n\nThese items should be verified. Use log_implementation_note to record verification results.`;
+        }
+
         return {
             content: [{
                 type: 'text',
-                text: `Intent ${intentId} status updated to "${status}". ${JSON.stringify(result)}`
+                text: responseText
             }]
         };
     }
@@ -589,6 +600,104 @@ server.prompt(
 );
 
 // ============================================================
+// Intent Compiler — Zero-config tools (no API key needed)
+// ============================================================
+
+const intentSpecSchema = {
+    title: z.string().describe('Short name for the intent'),
+    objective: z.string().describe('Why this matters — the problem and who has it'),
+    outcomes: z.array(z.string()).describe('Observable, testable state changes'),
+    constraints: z.array(z.string()).optional().describe('Hard limits the implementation must respect'),
+    edgeCases: z.array(z.object({
+        scenario: z.string(),
+        expectedBehavior: z.string(),
+    })).optional().describe('Failure modes and boundary conditions'),
+    healthMetrics: z.array(z.string()).optional().describe('What to monitor after shipping'),
+    verification: z.object({
+        manualChecks: z.array(z.string()).optional(),
+        unitTests: z.array(z.string()).optional(),
+        e2eTests: z.array(z.string()).optional(),
+    }).optional().describe('How to confirm it works'),
+};
+
+server.prompt(
+    'compile-intent',
+    'Start a Socratic conversation to build a structured intent spec from user feedback or a problem description. No Pathmode account needed.',
+    {},
+    async () => {
+        return {
+            messages: [{
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: getCompileIntentPrompt(),
+                },
+            }],
+        };
+    }
+);
+
+server.tool(
+    'intent_save',
+    'Save an intent spec to intent.md in the project root. Called after building a spec through conversation.',
+    {
+        spec: z.object(intentSpecSchema),
+        path: z.string().optional().describe('File path relative to cwd. Defaults to intent.md'),
+    },
+    async ({ spec, path }) => {
+        const filePath = resolve(process.cwd(), path || 'intent.md');
+        const content = formatIntentMd({ ...spec, id: `intent_${Date.now()}` });
+        writeFileSync(filePath, content, 'utf-8');
+        return {
+            content: [{
+                type: 'text' as const,
+                text: `✓ Saved intent spec to ${filePath}\n\nTo connect this to Pathmode for dependency tracking and team collaboration, visit pathmode.io`,
+            }],
+        };
+    }
+);
+
+server.tool(
+    'intent_export',
+    'Export an intent spec as .cursorrules or CLAUDE.md section for AI agent consumption.',
+    {
+        format: z.enum(['cursorrules', 'claude-md']).describe('Export format'),
+        spec: z.object(intentSpecSchema),
+        path: z.string().optional().describe('Output file path. Defaults to .cursorrules or CLAUDE.md'),
+    },
+    async ({ format, spec, path }) => {
+        if (format === 'cursorrules') {
+            const content = formatCursorRules(spec);
+            const filePath = resolve(process.cwd(), path || '.cursorrules');
+            writeFileSync(filePath, content, 'utf-8');
+            return {
+                content: [{
+                    type: 'text' as const,
+                    text: `✓ Exported .cursorrules to ${filePath}\n\nCursor and other AI agents will now see this intent as their implementation context.`,
+                }],
+            };
+        } else {
+            const section = formatClaudeMdSection(spec);
+            const filePath = resolve(process.cwd(), path || 'CLAUDE.md');
+            // Append or replace PATHMODE section in existing file
+            let existing = '';
+            try { existing = readFileSync(filePath, 'utf-8'); } catch { /* file doesn't exist yet */ }
+            const marker = /<!-- PATHMODE:START -->[\s\S]*?<!-- PATHMODE:END -->/;
+            const updated = marker.test(existing)
+                ? existing.replace(marker, section)
+                : existing ? existing + '\n\n' + section : section;
+            writeFileSync(filePath, updated, 'utf-8');
+            return {
+                content: [{
+                    type: 'text' as const,
+                    text: `✓ Exported CLAUDE.md section to ${filePath}\n\nClaude Code will now see this intent as context in every conversation.`,
+                }],
+            };
+        }
+    }
+);
+
+// ============================================================
 // Resources
 // ============================================================
 
@@ -636,7 +745,7 @@ server.resource(
         const intents = await client!.listIntents();
         const graph = intents.map(i => ({
             id: i.id,
-            userGoal: i.userGoal,
+            title: i.title,
             status: i.status,
             relations: i.relations,
         }));
