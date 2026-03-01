@@ -16,6 +16,7 @@ export interface PathmodeConfig {
 export interface ApiIntent {
     id: string;
     workspaceId: string;
+    productId?: string;
     journeyId?: string;
     stageId?: string;
     stageName?: string;
@@ -39,6 +40,79 @@ export interface ApiIntent {
     edgeCases: { id: string; scenario: string; expectedBehavior: string }[];
     evidenceIds: string[];
     relations: { targetId: string; type: string }[];
+}
+
+export interface CreateIntentInput {
+    title: string;
+    objective: string;
+    productId: string;
+    outcomes?: string[];
+    constraints?: string[];
+    healthMetrics?: string[];
+    edgeCases?: { scenario: string; expectedBehavior: string }[];
+    verification?: { manualChecks?: string[]; unitTests?: string[]; e2eTests?: string[] };
+    problemSeverity?: string;
+}
+
+export interface UpdateIntentInput {
+    title?: string;
+    objective?: string;
+    outcomes?: string[];
+    constraints?: string[];
+    healthMetrics?: string[];
+    edgeCases?: { scenario: string; expectedBehavior: string }[];
+    verification?: { manualChecks?: string[]; unitTests?: string[]; e2eTests?: string[] };
+    problemSeverity?: string;
+}
+
+export interface EvidenceQuery {
+    productId?: string;
+    type?: string;
+    severity?: string;
+    tags?: string;
+    search?: string;
+    limit?: number;
+}
+
+export interface CreateEvidenceInput {
+    content: string;
+    type: string;
+    productId: string;
+    source?: string;
+    sourceUrl?: string;
+    severity?: string;
+    sentiment?: string;
+    tags?: string[];
+    stage?: string;
+}
+
+export interface LinkEvidenceInput {
+    link?: string[];
+    unlink?: string[];
+}
+
+export interface ApiVerificationResult {
+    pass: boolean;
+    score: number;
+    results: { item: string; category: string; status: string; reasoning: string }[];
+    summary: string;
+}
+
+export interface ApiEvidence {
+    id: string;
+    productId: string;
+    workspaceId: string;
+    type: string;
+    content: string;
+    source?: string;
+    sourceUrl?: string;
+    severity?: string;
+    sentiment?: string;
+    tags: string[];
+    stage?: string;
+    linkedIntentIds: string[];
+    createdAt: string;
+    updatedAt: string;
 }
 
 export interface ApiWorkspace {
@@ -98,6 +172,7 @@ export class PathmodeClient {
 
     private async fetch(path: string, options: RequestInit = {}): Promise<Response> {
         const url = `${this.apiUrl}/api/v1${path}`;
+        console.error(`[pathmode-mcp] fetch: ${url}, key prefix: ${this.apiKey.substring(0, 16)}`);
         const response = await fetch(url, {
             ...options,
             headers: {
@@ -109,6 +184,7 @@ export class PathmodeClient {
 
         if (!response.ok) {
             const body = await response.json().catch(() => ({ error: response.statusText })) as { error?: string };
+            console.error(`[pathmode-mcp] ${response.status}: ${JSON.stringify(body)}, key length: ${this.apiKey.length}`);
             throw new Error(`API error (${response.status}): ${body.error || response.statusText}`);
         }
 
@@ -176,5 +252,57 @@ export class PathmodeClient {
         if (intentId) params.set('intent_id', intentId);
         const res = await this.fetch(`/export?${params.toString()}`);
         return res.text();
+    }
+
+    // --- Write operations (v1.3.0) ---
+
+    async createIntent(input: CreateIntentInput): Promise<ApiIntent> {
+        const res = await this.fetch('/intents', {
+            method: 'POST',
+            body: JSON.stringify(input),
+        });
+        return res.json() as Promise<ApiIntent>;
+    }
+
+    async updateIntent(id: string, updates: UpdateIntentInput): Promise<ApiIntent> {
+        const res = await this.fetch(`/intents/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(updates),
+        });
+        return res.json() as Promise<ApiIntent>;
+    }
+
+    async queryEvidence(filters: EvidenceQuery = {}): Promise<{ evidence: ApiEvidence[]; count: number }> {
+        const params = new URLSearchParams();
+        for (const [key, val] of Object.entries(filters)) {
+            if (val !== undefined && val !== null) params.set(key, String(val));
+        }
+        const qs = params.toString();
+        const res = await this.fetch(`/evidence${qs ? `?${qs}` : ''}`);
+        return res.json() as Promise<{ evidence: ApiEvidence[]; count: number }>;
+    }
+
+    async createEvidence(input: CreateEvidenceInput): Promise<ApiEvidence> {
+        const res = await this.fetch('/evidence', {
+            method: 'POST',
+            body: JSON.stringify(input),
+        });
+        return res.json() as Promise<ApiEvidence>;
+    }
+
+    async linkEvidence(intentId: string, body: LinkEvidenceInput): Promise<{ intentId: string; evidenceIds: string[]; linked: number; unlinked: number }> {
+        const res = await this.fetch(`/intents/${intentId}/evidence`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+        return res.json() as Promise<{ intentId: string; evidenceIds: string[]; linked: number; unlinked: number }>;
+    }
+
+    async verifyImplementation(intentId: string, summary: string, codeChanges?: string): Promise<ApiVerificationResult> {
+        const res = await this.fetch(`/intents/${intentId}/verify`, {
+            method: 'POST',
+            body: JSON.stringify({ summary, codeChanges }),
+        });
+        return res.json() as Promise<ApiVerificationResult>;
     }
 }

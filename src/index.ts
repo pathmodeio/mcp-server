@@ -37,6 +37,7 @@ let client: PathmodeClient | null = null;
 
 if (!isLocalMode) {
     const config = loadConfig();
+    console.error(`[pathmode-mcp] API key present: ${!!config?.apiKey}, prefix: ${config?.apiKey?.substring(0, 16) || 'none'}, url: ${config?.apiUrl || 'none'}`);
     if (config) {
         client = new PathmodeClient(config);
     }
@@ -49,7 +50,7 @@ if (!isLocalMode) {
 
 const server = new McpServer({
     name: 'pathmode',
-    version: '1.2.0',
+    version: '1.3.0',
 });
 
 // Annotation presets
@@ -542,6 +543,213 @@ server.registerTool(
     }
 );
 
+server.registerTool(
+    'create_intent',
+    {
+        title: 'Create Intent',
+        description: 'Create a new intent spec in the workspace. Requires at minimum a title, objective, and productId. Returns the created intent with its ID. Use list_intents first to see existing intents and avoid duplicates.',
+        inputSchema: {
+            title: z.string().describe('Short name for the intent (e.g., "Improve onboarding flow")'),
+            objective: z.string().describe('Why this matters — the problem and who has it'),
+            productId: z.string().describe('Product (Space) ID this intent belongs to. Use get_workspace to find product IDs.'),
+            outcomes: z.array(z.string()).optional().describe('Observable, testable state changes'),
+            constraints: z.array(z.string()).optional().describe('Hard limits the implementation must respect'),
+            healthMetrics: z.array(z.string()).optional().describe('What to monitor after shipping'),
+            edgeCases: z.array(z.object({
+                scenario: z.string(),
+                expectedBehavior: z.string(),
+            })).optional().describe('Failure modes and boundary conditions'),
+            verification: z.object({
+                manualChecks: z.array(z.string()).optional(),
+                unitTests: z.array(z.string()).optional(),
+                e2eTests: z.array(z.string()).optional(),
+            }).optional().describe('How to confirm it works'),
+            problemSeverity: z.enum(['low', 'medium', 'high', 'critical']).optional().describe('How severe the problem is'),
+        },
+        annotations: WRITE_OP,
+    },
+    async ({ productId, ...rest }) => {
+        if (isLocalMode) {
+            return { content: [{ type: 'text', text: 'Creating intents requires cloud mode. Use PATHMODE_API_KEY to connect.' }] };
+        }
+
+        const result = await client!.createIntent({ productId, ...rest });
+        return {
+            content: [{
+                type: 'text',
+                text: `Intent created: ${result.id}\nTitle: "${result.title}"\nStatus: ${result.status}\nProduct: ${result.productId || productId}`
+            }]
+        };
+    }
+);
+
+server.registerTool(
+    'update_intent',
+    {
+        title: 'Update Intent',
+        description: "Update an existing intent's content. Provide only the fields you want to change. Does NOT change intent status (use update_intent_status for that).",
+        inputSchema: {
+            intentId: z.string().describe('The intent ID to update'),
+            title: z.string().optional().describe('New title'),
+            objective: z.string().optional().describe('Updated objective'),
+            outcomes: z.array(z.string()).optional().describe('Replace all outcomes'),
+            constraints: z.array(z.string()).optional().describe('Replace all constraints'),
+            healthMetrics: z.array(z.string()).optional().describe('Replace all health metrics'),
+            edgeCases: z.array(z.object({
+                scenario: z.string(),
+                expectedBehavior: z.string(),
+            })).optional().describe('Replace all edge cases'),
+            verification: z.object({
+                manualChecks: z.array(z.string()).optional(),
+                unitTests: z.array(z.string()).optional(),
+                e2eTests: z.array(z.string()).optional(),
+            }).optional().describe('Replace verification plan'),
+            problemSeverity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+        },
+        annotations: { ...WRITE_OP, idempotentHint: true },
+    },
+    async ({ intentId, ...updates }) => {
+        if (isLocalMode) {
+            return { content: [{ type: 'text', text: 'Updating intents requires cloud mode.' }] };
+        }
+
+        const result = await client!.updateIntent(intentId, updates);
+        const changedFields = Object.keys(updates).filter(k => (updates as any)[k] !== undefined);
+        return {
+            content: [{
+                type: 'text',
+                text: `Intent ${intentId} updated. Fields changed: ${changedFields.join(', ')}`
+            }]
+        };
+    }
+);
+
+server.registerTool(
+    'query_evidence',
+    {
+        title: 'Query Evidence',
+        description: 'Search evidence items (friction points, user quotes, observations, metrics, feature requests) by product, type, severity, or text. Returns matching evidence with IDs that can be linked to intents.',
+        inputSchema: {
+            productId: z.string().optional().describe('Filter by product (Space) ID'),
+            type: z.enum(['friction', 'quote', 'observation', 'metric', 'request']).optional().describe('Filter by evidence type'),
+            severity: z.enum(['low', 'medium', 'high', 'critical']).optional().describe('Filter by severity'),
+            search: z.string().optional().describe('Text search across evidence content'),
+            tags: z.string().optional().describe('Comma-separated tags to filter by'),
+            limit: z.number().optional().describe('Max results (default 50, max 200)'),
+        },
+        annotations: READ_ONLY,
+    },
+    async (filters) => {
+        if (isLocalMode) {
+            return { content: [{ type: 'text', text: 'Evidence queries require cloud mode.' }] };
+        }
+
+        const result = await client!.queryEvidence(filters);
+        return {
+            content: [{
+                type: 'text',
+                text: JSON.stringify(result, null, 2)
+            }]
+        };
+    }
+);
+
+server.registerTool(
+    'create_evidence',
+    {
+        title: 'Create Evidence',
+        description: 'Create a new evidence item (e.g., a discovered bug, user feedback quote, behavioral observation, or feature request). Evidence can later be linked to intents to support prioritization.',
+        inputSchema: {
+            content: z.string().describe('The evidence content — a finding, quote, or observation'),
+            type: z.enum(['friction', 'quote', 'observation', 'metric', 'request']).describe('Type of evidence'),
+            productId: z.string().describe('Product (Space) ID this evidence belongs to'),
+            source: z.string().optional().describe('Where this evidence came from (e.g., "User interview", "Bug report", "Support ticket")'),
+            sourceUrl: z.string().optional().describe('URL to the original source'),
+            severity: z.enum(['low', 'medium', 'high', 'critical']).optional().describe('Severity level (required for friction type)'),
+            sentiment: z.enum(['positive', 'negative', 'neutral', 'mixed']).optional().describe('Emotional sentiment'),
+            tags: z.array(z.string()).optional().describe('Category tags (e.g., ["Onboarding", "Performance"])'),
+            stage: z.string().optional().describe('User journey stage (e.g., "Discovery", "Checkout")'),
+        },
+        annotations: WRITE_OP,
+    },
+    async ({ productId, ...rest }) => {
+        if (isLocalMode) {
+            return { content: [{ type: 'text', text: 'Creating evidence requires cloud mode.' }] };
+        }
+
+        const result = await client!.createEvidence({ productId, ...rest });
+        return {
+            content: [{
+                type: 'text',
+                text: `Evidence created: ${result.id}\nType: ${result.type}\nContent: "${(result.content || '').slice(0, 80)}${(result.content || '').length > 80 ? '...' : ''}"`
+            }]
+        };
+    }
+);
+
+server.registerTool(
+    'link_evidence',
+    {
+        title: 'Link Evidence to Intent',
+        description: 'Link or unlink evidence items to/from an intent. Linking evidence to intents establishes traceability between user problems and planned solutions.',
+        inputSchema: {
+            intentId: z.string().describe('The intent ID to link evidence to'),
+            link: z.array(z.string()).optional().describe('Evidence IDs to link to this intent'),
+            unlink: z.array(z.string()).optional().describe('Evidence IDs to unlink from this intent'),
+        },
+        annotations: WRITE_OP,
+    },
+    async ({ intentId, link, unlink }) => {
+        if (isLocalMode) {
+            return { content: [{ type: 'text', text: 'Evidence linking requires cloud mode.' }] };
+        }
+
+        const result = await client!.linkEvidence(intentId, { link, unlink });
+        const actions: string[] = [];
+        if (link && link.length > 0) actions.push(`linked ${result.linked} evidence items`);
+        if (unlink && unlink.length > 0) actions.push(`unlinked ${result.unlinked} evidence items`);
+        return {
+            content: [{
+                type: 'text',
+                text: `Intent ${intentId}: ${actions.join(', ')}. Total evidence linked: ${result.evidenceIds.length}`
+            }]
+        };
+    }
+);
+
+server.registerTool(
+    'verify_implementation',
+    {
+        title: 'Verify Implementation',
+        description: 'AI-grade your implementation against the intent spec. Checks each outcome, constraint, constitution rule, and edge case. Returns pass/fail per item with reasoning and an overall score. Also logs the result as an implementation note.',
+        inputSchema: {
+            intentId: z.string().describe('The intent ID to verify against'),
+            summary: z.string().describe('Description of what was implemented and how'),
+            codeChanges: z.string().optional().describe('Summary of code changes (file list, key modifications)'),
+        },
+        annotations: WRITE_OP,
+    },
+    async ({ intentId, summary, codeChanges }) => {
+        if (isLocalMode) {
+            return { content: [{ type: 'text', text: 'Verification requires cloud mode.' }] };
+        }
+
+        try {
+            const result = await client!.verifyImplementation(intentId, summary, codeChanges);
+
+            let text = `Verification ${result.pass ? 'PASSED' : 'FAILED'} (score: ${result.score}/100)\n\n`;
+            text += `${result.summary}\n\n`;
+            for (const r of result.results) {
+                const icon = r.status === 'pass' ? '[PASS]' : r.status === 'fail' ? '[FAIL]' : '[????]';
+                text += `${icon} [${r.category}] ${r.item}\n    ${r.reasoning}\n`;
+            }
+            return { content: [{ type: 'text', text }] };
+        } catch (e: any) {
+            return { content: [{ type: 'text', text: `Verification failed: ${e.message}` }] };
+        }
+    }
+);
+
 // ============================================================
 // Prompts
 // ============================================================
@@ -558,7 +766,7 @@ server.prompt(
                 role: 'user',
                 content: {
                     type: 'text',
-                    text: `I need to implement intent ${intentId}. Please:\n1. Use the get_agent_prompt tool to fetch the full execution prompt for this intent\n2. Use get_constitution to check for workspace constraints I must respect\n3. Review the intent details and create an implementation plan\n4. After implementation, use update_intent_status to mark it as "shipped"\n5. Use log_implementation_note to document key technical decisions`,
+                    text: `I need to implement intent ${intentId}. Please:\n1. Use the get_agent_prompt tool to fetch the full execution prompt for this intent\n2. Use get_constitution to check for workspace constraints I must respect\n3. Review the intent details and create an implementation plan\n4. After implementation, use verify_implementation to AI-grade your work against the spec\n5. If verification passes, use update_intent_status to mark it as "shipped"\n6. Use log_implementation_note to document key technical decisions`,
                 },
             }],
         };
@@ -593,6 +801,25 @@ server.prompt(
                 content: {
                     type: 'text',
                     text: 'Help me decide what to work on next:\n1. Use analyze_intent_graph with analysis "critical-path" to find the critical path\n2. Use list_intents with status "approved" to see what\'s ready for implementation\n3. Consider: which approved intents are on the critical path? Which unblock the most other work?\n4. Recommend the single highest-impact intent to implement next, and explain why',
+                },
+            }],
+        };
+    }
+);
+
+server.prompt(
+    'create-from-evidence',
+    'Search for evidence items, identify patterns, and create an intent based on the strongest evidence cluster.',
+    {
+        productId: z.string().describe('The product ID to search evidence for'),
+    },
+    async ({ productId }) => {
+        return {
+            messages: [{
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: `Help me create a new intent from evidence:\n1. Use query_evidence with productId "${productId}" to see what evidence exists\n2. Look for patterns — multiple friction points about the same issue, or high-severity items\n3. Propose an intent based on the strongest evidence cluster\n4. Use create_intent to create the intent\n5. Use link_evidence to link the relevant evidence items to the new intent`,
                 },
             }],
         };
