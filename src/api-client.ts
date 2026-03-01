@@ -33,6 +33,7 @@ export interface ApiIntent {
     constraints: string[];
     verification: Record<string, any>;
     externalLinks: any[];
+    evidenceAnchors: Record<string, string[]>;
     createdAt: string;
     updatedAt: string;
     shippedAt?: string;
@@ -63,6 +64,7 @@ export interface UpdateIntentInput {
     edgeCases?: { scenario: string; expectedBehavior: string }[];
     verification?: { manualChecks?: string[]; unitTests?: string[]; e2eTests?: string[] };
     problemSeverity?: string;
+    evidenceAnchors?: Record<string, string[]>;
 }
 
 export interface EvidenceQuery {
