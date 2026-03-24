@@ -23,6 +23,20 @@
  *   }
  */
 
+// ─── Fetch polyfill for Node < 18 or restricted environments ──
+if (typeof globalThis.fetch === 'undefined') {
+    try {
+        // undici is bundled with Node 18+ but fetch may not be exposed
+        const undici = require('undici');
+        globalThis.fetch = undici.fetch;
+        globalThis.Request = undici.Request;
+        globalThis.Response = undici.Response;
+        globalThis.Headers = undici.Headers;
+    } catch {
+        console.error('[pathmode-mcp] Warning: fetch is not available and undici could not be loaded. Requires Node.js >= 18.');
+    }
+}
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
