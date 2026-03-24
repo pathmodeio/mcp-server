@@ -417,20 +417,21 @@ server.registerTool(
     'export_context',
     {
         title: 'Export Context',
-        description: 'Export workspace context as a formatted file. Use "claude-md" for CLAUDE.md (full workspace context), "cursorrules" for Cursor AI rules, or "intent-md" for a single intent specification file.',
+        description: 'Export workspace context as a formatted file. Use "claude-md" for CLAUDE.md (full workspace context), "cursorrules" for Cursor AI rules, or "intent-md" for a single intent specification file. For cursorrules/intent-md, product context is always derived from the resolved intent. For claude-md, pass productId to select a specific product, otherwise the first active product is used.',
         inputSchema: {
             format: z.enum(['claude-md', 'cursorrules', 'intent-md']).describe('Export format'),
             intentId: z.string().optional().describe('Intent ID (optional, for cursorrules and intent-md)'),
+            productId: z.string().optional().describe('Product ID (optional, only used for claude-md format to select a specific product)'),
         },
         annotations: READ_ONLY,
     },
-    async ({ format, intentId }) => {
+    async ({ format, intentId, productId }) => {
         if (isLocalMode) {
             return { content: [{ type: 'text', text: 'Export requires cloud mode. Use PATHMODE_API_KEY to connect.' }] };
         }
 
         try {
-            const content = await client!.exportContext(format, intentId);
+            const content = await client!.exportContext(format, intentId, productId);
             return { content: [{ type: 'text', text: content }] };
         } catch (e: any) {
             return { content: [{ type: 'text', text: `Export failed: ${e.message}` }] };
@@ -468,7 +469,7 @@ server.registerTool(
     'get_workspace',
     {
         title: 'Get Workspace',
-        description: 'Get workspace details including strategy (vision, non-negotiables, architecture principles) and constitution rules.',
+        description: 'Get workspace details including strategy (vision, non-negotiables, architecture principles), active products, and constitution rules.',
         annotations: READ_ONLY,
     },
     async () => {

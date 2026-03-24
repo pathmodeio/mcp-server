@@ -185,9 +185,9 @@ Read `intent.md` files from your project directory without an API key:
 
 | Tool | Description |
 |------|-------------|
-| `export_context` | Generate CLAUDE.md, .cursorrules, or intent.md files |
+| `export_context` | Generate CLAUDE.md, .cursorrules, or intent.md files. For claude-md, optionally pass a product ID; for cursorrules/intent-md, product is derived from the resolved intent |
 | `get_agent_prompt` | Get a structured execution prompt for an intent |
-| `get_workspace` | Get workspace details including strategy and constitution |
+| `get_workspace` | Get workspace details including strategy, active products, and constitution |
 | `get_constitution` | Get mandatory constraint rules for the workspace |
 
 #### Team Prompts

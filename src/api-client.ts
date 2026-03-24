@@ -128,6 +128,7 @@ export interface ApiWorkspace {
         nonNegotiables?: string[];
         architecturePrinciples?: string[];
     } | null;
+    products?: ApiProduct[];
     constitutionRules: {
         id: string;
         category: string;
@@ -135,6 +136,25 @@ export interface ApiWorkspace {
         isActive: boolean;
         createdAt: string;
     }[];
+}
+
+export interface ApiProduct {
+    id: string;
+    workspaceId: string;
+    name: string;
+    slug: string;
+    description?: string;
+    productVision?: string;
+    northStar?: string;
+    targetAudience?: string;
+    defaultContext?: Record<string, any>;
+    manifest?: Record<string, any>;
+    icon?: string;
+    color?: string;
+    status: string;
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
 }
 
 const CONFIG_DIR = path.join(os.homedir(), '.pathmode');
@@ -249,9 +269,10 @@ export class PathmodeClient {
         return res.text();
     }
 
-    async exportContext(format: 'claude-md' | 'cursorrules' | 'intent-md', intentId?: string): Promise<string> {
+    async exportContext(format: 'claude-md' | 'cursorrules' | 'intent-md', intentId?: string, productId?: string): Promise<string> {
         const params = new URLSearchParams({ format });
         if (intentId) params.set('intent_id', intentId);
+        if (productId) params.set('product_id', productId);
         const res = await this.fetch(`/export?${params.toString()}`);
         return res.text();
     }
