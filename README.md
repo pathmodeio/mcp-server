@@ -113,6 +113,12 @@ For teams shipping with AI agents, connect to your [Pathmode](https://pathmode.i
 
 ### Setup with API Key
 
+Automatic setup:
+
+```bash
+npx @pathmode/mcp-server@latest setup pm_live_...
+```
+
 ```json
 {
   "mcpServers": {
@@ -210,6 +216,29 @@ Most team tools require cloud mode. Set up an API key, or use `--local` for basi
 
 **Connection timeout**
 Ensure your API key is valid and has the correct scopes. Check your network connection to `pathmode.io`.
+
+**`setup` starts the server instead of the installer**
+Use the latest package version:
+
+```bash
+npx @pathmode/mcp-server@latest setup pm_live_...
+```
+
+As a fallback, you can bypass setup entirely by setting the key directly in the MCP config:
+
+```json
+{
+  "mcpServers": {
+    "pathmode": {
+      "command": "npx",
+      "args": ["@pathmode/mcp-server"],
+      "env": {
+        "PATHMODE_API_KEY": "pm_live_..."
+      }
+    }
+  }
+}
+```
 
 ## Privacy Policy
 

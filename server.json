@@ -4,7 +4,8 @@
   "description": "Build intent specs via Socratic AI conversation. Connect to your Intent Layer for context.",
   "repository": {
     "url": "https://github.com/pathmodeio/mcp-server",
-    "source": "github"
+    "source": "github",
+    "directory": "packages/mcp-server"
   },
   "version": "1.4.0",
   "packages": [

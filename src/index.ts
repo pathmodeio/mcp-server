@@ -5,8 +5,9 @@
  * Connects Claude Code, Cursor, and other AI agents to your Intent Layer.
  *
  * Usage:
- *   npx @pathmode/mcp-server            # Cloud mode (uses ~/.pathmode/config.json)
- *   npx @pathmode/mcp-server --local     # Local mode (reads intent.md from cwd)
+ *   npx @pathmode/mcp-server                    # Cloud mode (uses ~/.pathmode/config.json)
+ *   npx @pathmode/mcp-server --local             # Local mode (reads intent.md from cwd)
+ *   npx @pathmode/mcp-server setup pm_live_xxx   # Auto-configure your tools
  *
  * The Intent Compiler (compile-intent prompt, intent_save, intent_export tools)
  * works without an API key — zero-config intent spec building in Claude Code.
@@ -30,6 +31,24 @@ import { writeFileSync, readFileSync } from 'fs';
 import { PathmodeClient, loadConfig } from './api-client';
 import { readLocalIntents } from './local-reader';
 import { getCompileIntentPrompt, formatIntentMd, formatCursorRules, formatClaudeMdSection } from './intent-compiler';
+import { isSetupCommand, runSetup } from './setup';
+
+// ─── Subcommand routing ───────────────────────────────────────
+// `setup` uses stdout for human-readable output and must run
+// before StdioServerTransport claims stdout for JSON-RPC.
+// We call startMcpServer() only when NOT in setup mode.
+if (isSetupCommand()) {
+    runSetup().then(() => process.exit(0)).catch((err) => {
+        console.error(err);
+        process.exit(1);
+    });
+} else {
+    startMcpServer();
+}
+
+function startMcpServer() {
+
+// ─── MCP Server ───────────────────────────────────────────────
 
 const isLocalMode = process.argv.includes('--local');
 
@@ -475,44 +494,6 @@ server.registerTool(
     }
 );
 
-server.registerTool(
-    'list_signals',
-    {
-        title: 'List Signals',
-        description: 'Query active signals (stale intents, loose evidence, evidence matches, verification failures). Signals surface things that need attention. By default returns only active (non-dismissed) signals.',
-        inputSchema: {
-            productId: z.string().optional().describe('Filter by product ID'),
-            type: z.enum(['evidence_match', 'evidence_freshness', 'loose_evidence', 'stale_intent', 'alignment_drift', 'verification_failed']).optional().describe('Filter by signal type'),
-            severity: z.enum(['low', 'medium', 'high', 'critical']).optional().describe('Filter by severity'),
-            dismissed: z.enum(['true', 'false', 'all']).optional().describe('Filter by dismissed status (default: false = active only)'),
-            limit: z.number().optional().describe('Max results (default 50, max 200)'),
-        },
-        annotations: READ_ONLY,
-    },
-    async (filters) => {
-        if (isLocalMode) {
-            return { content: [{ type: 'text', text: 'Signals require cloud mode.' }] };
-        }
-
-        try {
-            const result = await client!.listSignals(filters);
-
-            if (result.signals.length === 0) {
-                return { content: [{ type: 'text', text: 'No signals found matching the filters. All clear!' }] };
-            }
-
-            return {
-                content: [{
-                    type: 'text',
-                    text: JSON.stringify(result, null, 2)
-                }]
-            };
-        } catch (e: any) {
-            return { content: [{ type: 'text', text: `Failed to fetch signals: ${e.message}` }] };
-        }
-    }
-);
-
 // ============================================================
 // Tools — Write Operations
 // ============================================================
@@ -784,35 +765,6 @@ server.registerTool(
             return { content: [{ type: 'text', text }] };
         } catch (e: any) {
             return { content: [{ type: 'text', text: `Verification failed: ${e.message}` }] };
-        }
-    }
-);
-
-server.registerTool(
-    'dismiss_signal',
-    {
-        title: 'Dismiss Signal',
-        description: 'Dismiss a signal by ID. Use this when a signal has been addressed or is no longer relevant.',
-        inputSchema: {
-            signalId: z.string().describe('The signal ID to dismiss'),
-        },
-        annotations: { ...WRITE_OP, idempotentHint: true },
-    },
-    async ({ signalId }) => {
-        if (isLocalMode) {
-            return { content: [{ type: 'text', text: 'Dismissing signals requires cloud mode.' }] };
-        }
-
-        try {
-            await client!.dismissSignal(signalId);
-            return {
-                content: [{
-                    type: 'text',
-                    text: `Signal ${signalId} dismissed successfully.`
-                }]
-            };
-        } catch (e: any) {
-            return { content: [{ type: 'text', text: `Failed to dismiss signal: ${e.message}` }] };
         }
     }
 );
@@ -1106,3 +1058,6 @@ main().catch((error) => {
     console.error('Failed to start Pathmode MCP server:', error);
     process.exit(1);
 });
+
+} // end startMcpServer()
+

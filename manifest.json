@@ -12,9 +12,10 @@
   "homepage": "https://pathmode.io",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pathmodeio/mcp-server"
+    "url": "https://github.com/pathmodeio/mcp-server",
+    "directory": "packages/mcp-server"
   },
-  "documentation": "https://github.com/pathmodeio/mcp-server#readme",
+  "documentation": "https://pathmode.io/playbook",
   "support": "https://github.com/pathmodeio/mcp-server/issues",
   "license": "MIT",
   "icon": "icon.svg",

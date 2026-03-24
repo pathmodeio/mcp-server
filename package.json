@@ -1,6 +1,6 @@
 {
   "name": "@pathmode/mcp-server",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "mcpName": "io.github.pathmodeio/mcp-server",
   "description": "Pathmode MCP Server — Build structured intent specs through Socratic AI conversation (zero-config), or connect to your Intent Layer for strategic context, dependency graphs, and implementation prompts.",
   "main": "dist/index.js",
@@ -40,7 +40,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pathmodeio/mcp-server.git"
+    "url": "git+https://github.com/pathmodeio/mcp-server.git",
+    "directory": "packages/mcp-server"
   },
   "homepage": "https://pathmode.io",
   "dependencies": {

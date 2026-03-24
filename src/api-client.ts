@@ -117,30 +117,6 @@ export interface ApiEvidence {
     updatedAt: string;
 }
 
-export interface ApiSignal {
-    id: string;
-    workspaceId: string;
-    productId: string;
-    type: string;
-    severity: string;
-    title: string;
-    description?: string;
-    data: Record<string, any>;
-    isDismissed: boolean;
-    dismissedBy?: string;
-    dismissedAt?: string;
-    createdAt: string;
-    expiresAt?: string;
-}
-
-export interface SignalQuery {
-    productId?: string;
-    type?: string;
-    severity?: string;
-    dismissed?: string;
-    limit?: number;
-}
-
 export interface ApiWorkspace {
     id: string;
     name: string;
@@ -332,23 +308,4 @@ export class PathmodeClient {
         return res.json() as Promise<ApiVerificationResult>;
     }
 
-    // --- Signal operations ---
-
-    async listSignals(filters: SignalQuery = {}): Promise<{ signals: ApiSignal[]; count: number }> {
-        const params = new URLSearchParams();
-        for (const [key, val] of Object.entries(filters)) {
-            if (val !== undefined && val !== null) params.set(key, String(val));
-        }
-        const qs = params.toString();
-        const res = await this.fetch(`/signals${qs ? `?${qs}` : ''}`);
-        return res.json() as Promise<{ signals: ApiSignal[]; count: number }>;
-    }
-
-    async dismissSignal(signalId: string): Promise<{ id: string; dismissed: boolean }> {
-        const res = await this.fetch('/signals', {
-            method: 'PATCH',
-            body: JSON.stringify({ signalId }),
-        });
-        return res.json() as Promise<{ id: string; dismissed: boolean }>;
-    }
 }
