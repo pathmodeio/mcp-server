@@ -225,7 +225,7 @@ server.registerTool(
             const intents = readLocalIntents();
             const q = query.toLowerCase();
             const matches = intents.filter(i => {
-                const text = [i.title, i.objective, ...i.outcomes, ...i.constraints].join(' ').toLowerCase();
+                const text = [i.title, i.objective, ...i.outcomes.map((o: any) => typeof o === 'string' ? o : o.text), ...i.constraints].join(' ').toLowerCase();
                 return text.includes(q) && (!status || i.status === status);
             });
             return { content: [{ type: 'text', text: JSON.stringify({ results: matches, count: matches.length, query }, null, 2) }] };
@@ -235,7 +235,7 @@ server.registerTool(
             const intents = await client!.listIntents(status);
             const q = query.toLowerCase();
             const matches = intents.filter(i => {
-                const text = [i.title, i.objective, ...(i.outcomes || []), ...(i.constraints || [])].join(' ').toLowerCase();
+                const text = [i.title, i.objective, ...(i.outcomes || []).map((o: any) => typeof o === 'string' ? o : o.text), ...(i.constraints || [])].join(' ').toLowerCase();
                 return text.includes(q);
             });
             const results = matches.map(i => ({

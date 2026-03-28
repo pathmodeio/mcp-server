@@ -6,7 +6,7 @@ No signup. No API key. Just add the MCP server and start talking.
 
 ## Intent Compiler
 
-The Intent Compiler turns Claude Code into a Socratic product thinking partner. Describe a problem, paste a support ticket, or explain what's broken — Claude challenges vague thinking, asks pointed questions, and builds a structured spec.
+The Intent Compiler turns Claude Code into a Socratic product thinking partner. Describe a problem, paste a support ticket, or explain what's broken — Claude challenges vague thinking, asks pointed questions, runs live quality checks on weak fields, and builds a structured spec.
 
 ```
 > Help me write an intent spec for our checkout flow

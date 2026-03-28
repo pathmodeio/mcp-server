@@ -13,6 +13,12 @@ export interface PathmodeConfig {
     workspaceId: string;
 }
 
+export interface ApiStructuredOutcome {
+    id: string;
+    text: string;
+    priority?: 'must' | 'should' | 'could';
+}
+
 export interface ApiIntent {
     id: string;
     workspaceId: string;
@@ -25,8 +31,9 @@ export interface ApiIntent {
     objective: string;
     problemSeverity?: string;
     title: string;
-    outcomes: string[];
+    outcomes: ApiStructuredOutcome[];
     healthMetrics: string[];
+    scope?: { inScope?: string[]; outOfScope?: string[] };
     strategicAlignment?: string;
     alignmentNotes?: string;
     context: Record<string, any>;
@@ -47,24 +54,26 @@ export interface CreateIntentInput {
     title: string;
     objective: string;
     productId: string;
-    outcomes?: string[];
+    outcomes?: (string | { text: string; priority?: string })[];
     constraints?: string[];
     healthMetrics?: string[];
     edgeCases?: { scenario: string; expectedBehavior: string }[];
     verification?: { manualChecks?: string[]; unitTests?: string[]; e2eTests?: string[] };
     problemSeverity?: string;
+    scope?: { inScope?: string[]; outOfScope?: string[] };
 }
 
 export interface UpdateIntentInput {
     title?: string;
     objective?: string;
-    outcomes?: string[];
+    outcomes?: (string | { text: string; priority?: string })[];
     constraints?: string[];
     healthMetrics?: string[];
     edgeCases?: { scenario: string; expectedBehavior: string }[];
     verification?: { manualChecks?: string[]; unitTests?: string[]; e2eTests?: string[] };
     problemSeverity?: string;
     evidenceAnchors?: Record<string, string[]>;
+    scope?: { inScope?: string[]; outOfScope?: string[] };
 }
 
 export interface EvidenceQuery {

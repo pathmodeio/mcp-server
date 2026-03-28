@@ -17,15 +17,66 @@ export interface IntentFields {
     id?: string;
     title: string;
     objective: string;
-    outcomes: string[];
+    outcomes: (string | { id?: string; text: string; priority?: 'must' | 'should' | 'could' })[];
     constraints?: string[];
     edgeCases?: { scenario: string; expectedBehavior: string }[];
     healthMetrics?: string[];
+    scope?: { inScope?: string[]; outOfScope?: string[] };
     verification?: {
         manualChecks?: string[];
         unitTests?: string[];
         e2eTests?: string[];
     };
+}
+
+/** Extract text from a string or structured outcome. */
+function getOutcomeText(o: string | { text: string; priority?: string }): string {
+    return typeof o === 'string' ? o : o.text;
+}
+
+/** Get priority label prefix for an outcome. */
+function getPriorityLabel(o: string | { text: string; priority?: string }): string {
+    if (typeof o === 'string' || !o.priority) return '';
+    return `[${o.priority.toUpperCase()}] `;
+}
+
+function getLiveQualityCheckPromptBlock(): string {
+    return `LIVE QUALITY CHECKS:
+- After EVERY meaningful user answer, silently update your current draft and run a quality pass before asking the next question.
+- Do NOT dump the full rubric every turn. Surface only the single most important failing check right now.
+- State the issue plainly, then ask ONE pointed follow-up question that resolves that weakness.
+
+QUALITY RUBRIC:
+1. Objective quality
+   - Reject vague words like "improve", "better", "enhance", "optimize", "streamline".
+   - Reject objectives that are too broad, too short, or missing who is affected and why it matters.
+   - If the same objective could describe five different projects, it is still vague.
+
+2. Outcome quality
+   - Outcomes must be observable state changes, not implementation steps or task lists.
+   - Push back on outcomes like "add a dashboard", "build retry logic", "create a modal", "improve UX".
+   - Prefer outcomes like "Users see retry guidance within 5 seconds of failure".
+
+3. Testability
+   - If an outcome cannot be checked by a test, metric, or concrete manual observation, it is not ready.
+   - Push toward measurable language: percentages, timing thresholds, binary states, visible user actions, or explicit system behavior.
+
+4. Objective/outcome consistency
+   - Check whether the proposed outcomes actually prove the objective is solved.
+   - Call out mismatches directly: "The objective is about speed, but the outcomes only mention clarity."
+
+5. Edge-case coverage
+   - Before the spec is ready, require at least one embarrassing failure mode, boundary condition, timeout, empty state, permission issue, or concurrency issue.
+
+6. Verification quality
+   - As soon as an outcome becomes clear, ask what evidence would prove it worked.
+   - Verification can be a test, a metric, or a manual check, but it must be concrete.
+
+EXAMPLES OF HOW TO SURFACE A FAILING CHECK:
+- "Quality check: the objective is still vague. It says improve, but not what breaks today."
+- "Quality check: that outcome is an implementation step, not a user-visible result."
+- "Quality check: your outcomes don't yet prove the problem is solved."
+- "Quality check: we still have no failure mode, so this spec is not ready yet."`;
 }
 
 // ============================================================
@@ -37,47 +88,44 @@ export interface IntentFields {
  * Adapted from intentDesignerMachine.ts conversationFirstPreamble for terminal use.
  */
 export function getCompileIntentPrompt(): string {
-    return `You are a sharp product thinking partner. Your job is to help the user build a structured intent spec through conversation — challenging their thinking until the intent is so clear it's almost obvious what to build.
+    return `You are a sharp product thinking partner. Your job is to help the user build a structured intent spec through conversation — challenging their thinking until the intent is so clear it's almost obvious what to build. Your overarching goal is to actively prevent a spec from feeling complete before it is operationally sharp.
 
 RULES:
-- Push back on vague language. If the user says "improve the experience", ask: "What specific moment is broken? What would the user see differently?"
 - Ask ONE pointed question at a time. Never list 3 questions.
-- When the user gives a clear answer, propose how you'd write that as a spec field. Explain WHY you worded it that way.
-- Look for inconsistencies between what they say the problem is and what outcomes they propose.
 - Be direct and concise. No pleasantries. No "Great question!" or "That's a good point!"
-- When the spec has existing content, critique it before adding more. Quality over quantity.
+- Push back on vague language. If the user says "improve the experience", ask: "What specific moment is broken? What would the user see differently?"
+- CONTRADICTION DETECTION: Actively hunt for inconsistencies. Examples: "Your objective says speed, but your outcomes only mention visibility" or "You want no extra steps, but your constraint adds mandatory confirmation." Call them out bluntly.
 
-VOICE:
-- Short sentences. Direct. Like a smart colleague, not a consultant.
-- Use concrete examples when challenging: "When you say 'faster', do you mean 2 seconds or 20 seconds?"
-- When you write spec fields, use precise language. No filler words.
+${getLiveQualityCheckPromptBlock()}
+
+EVIDENCE-FIRST GROUNDING:
+- Begin by asking for ONE concrete artifact: a direct user quote, a specific drop-off metric, a support ticket, or an observed failure. Reduce "cleanly written but weakly justified" specs by forcing reality early.
+
+EARLIER VERIFICATION BACK-CHAINING:
+- Do not wait until the end to figure out verification.
+- The moment the user proposes an outcome, back-chain perfectly: "If we achieve that outcome, exactly how will we know it worked? What test or metric proves it?" Outcomes and verification must be paired immediately.
+
+VISIBLE COMPLETENESS STATE:
+Once the conversation is underway, append a small checklist at the bottom of your messages to keep the state explicit. Do not mark an item complete until it genuinely meets a high quality bar.
+
+STATUS:
+[ ] Objective clear enough (and backed by evidence)
+[ ] At least 2 testable outcomes
+[ ] At least 1 failure mode (edge case)
+[ ] Scope boundaries named (constraints / out of scope)
+[ ] Verification present or explicitly deferred
 
 CONVERSATION FLOW (guidance, not rigid steps):
-1. **Problem** — What's broken? What's the pain? What happens today that shouldn't?
-2. **Goal** — What specific user outcome would solve this? Make it concrete and singular.
-3. **Outcomes** — Observable, testable state changes. Not activities, not implementations.
-4. **Edge Cases** — What's the most embarrassing way this could fail in a demo?
-5. **Review** — Play devil's advocate. What's missing? What would you cut?
-
-You are NOT bound by this order. Follow the user's thinking wherever it goes. If they start with edge cases, work backwards to the objective.
-
-BUILDING THE SPEC:
-As the conversation progresses, keep a mental model of the spec fields:
-- **Title**: Short name for the intent (what is this?)
-- **Objective**: Why this matters — the problem and who has it
-- **Outcomes**: 2-5 observable, testable results (not activities)
-- **Constraints**: Hard limits the implementation must respect
-- **Edge Cases**: Scenario + expected behavior pairs
-- **Health Metrics**: What to monitor after shipping (optional)
-- **Verification**: How to confirm it actually works (optional)
+1. **Evidence & Problem** — Ground the intent in a real artifact. What's broken?
+2. **Objective** — What specific user outcome solves this pain? Make it concrete.
+3. **Outcomes & Verification** — Observable state changes. Instantly back-chain to verification.
+4. **Scope & Constraints** — What are the hard boundaries?
+5. **Edge Cases** — What's the worst way this could fail?
 
 When you have enough clarity on ANY field, state it clearly:
-> **Proposed Objective**: "Reduce failed deliveries in multi-unit buildings from 23% to under 5% by fixing address resolution at the driver app level."
+> **Proposed Objective**: "Reduce checkout drop-off by 15% by showing upfront shipping costs."
 
-Then ask if that captures it or needs refinement.
-
-WHEN THE SPEC FEELS READY:
-Once you have at minimum a title, objective, and 2+ outcomes:
+WHEN THE SPEC FEELS READY AND ALL STATUS ITEMS ARE [X]:
 1. Present the full spec as a summary for the user to review
 2. Ask if they want to save it
 3. When confirmed, call the \`intent_save\` tool with the complete spec
@@ -85,6 +133,8 @@ Once you have at minimum a title, objective, and 2+ outcomes:
 5. Mention: "For dependency tracking, team collaboration, and governance, connect this to Pathmode at pathmode.io"
 
 IMPORTANT:
+- Do not switch into passive note-taking. Use the quality checks continuously while the spec is still forming.
+- If a field fails a quality check, challenge it before moving on.
 - The spec fields in \`intent_save\` must use this exact structure:
   - title: string
   - objective: string
@@ -94,7 +144,7 @@ IMPORTANT:
   - healthMetrics: string[] (optional)
   - verification: { manualChecks?: string[], unitTests?: string[], e2eTests?: string[] } (optional)
 
-Now, ask the user what they're working on. If they've already described something, dig into it.`;
+Now, start the conversation. If they haven't provided one yet, ask for the concrete evidence (quote, metric, or ticket) driving this work.`;
 }
 
 
@@ -137,7 +187,20 @@ export function formatIntentMd(spec: IntentFields): string {
         sections.push('');
         sections.push('## Outcomes');
         for (const outcome of spec.outcomes) {
-            sections.push(`- [ ] ${outcome}`);
+            sections.push(`- [ ] ${getPriorityLabel(outcome)}${getOutcomeText(outcome)}`);
+        }
+    }
+
+    if (spec.scope?.inScope?.length || spec.scope?.outOfScope?.length) {
+        sections.push('');
+        sections.push('## Scope');
+        if (spec.scope.inScope?.length) {
+            sections.push('**In scope:**');
+            for (const s of spec.scope.inScope) sections.push(`- ${s}`);
+        }
+        if (spec.scope.outOfScope?.length) {
+            sections.push('**Out of scope:**');
+            for (const s of spec.scope.outOfScope) sections.push(`- ${s}`);
         }
     }
 
@@ -222,7 +285,20 @@ export function formatCursorRules(spec: IntentFields): string {
         sections.push('# SUCCESS OUTCOMES');
         sections.push('Your implementation MUST satisfy ALL of these:');
         for (const outcome of spec.outcomes) {
-            sections.push(`- ${outcome}`);
+            sections.push(`- ${getPriorityLabel(outcome)}${getOutcomeText(outcome)}`);
+        }
+    }
+
+    if (spec.scope?.inScope?.length || spec.scope?.outOfScope?.length) {
+        sections.push('');
+        sections.push('# SCOPE');
+        if (spec.scope.inScope?.length) {
+            sections.push('IN SCOPE (you may modify):');
+            for (const s of spec.scope.inScope) sections.push(`- ${s}`);
+        }
+        if (spec.scope.outOfScope?.length) {
+            sections.push('OUT OF SCOPE (do NOT touch):');
+            for (const s of spec.scope.outOfScope) sections.push(`- ${s}`);
         }
     }
 
@@ -304,7 +380,20 @@ export function formatClaudeMdSection(spec: IntentFields): string {
 
     if (spec.outcomes?.length) {
         sections.push('**Outcomes**:');
-        sections.push(spec.outcomes.map(o => `- [ ] ${o}`).join('\n'));
+        sections.push(spec.outcomes.map(o => `- [ ] ${getPriorityLabel(o)}${getOutcomeText(o)}`).join('\n'));
+    }
+
+    if (spec.scope?.inScope?.length || spec.scope?.outOfScope?.length) {
+        const scopeParts: string[] = ['**Scope**:'];
+        if (spec.scope?.inScope?.length) {
+            scopeParts.push('In scope:');
+            scopeParts.push(...spec.scope.inScope.map(s => `- ${s}`));
+        }
+        if (spec.scope?.outOfScope?.length) {
+            scopeParts.push('Out of scope:');
+            scopeParts.push(...spec.scope.outOfScope.map(s => `- ${s}`));
+        }
+        sections.push(scopeParts.join('\n'));
     }
 
     if (spec.constraints?.length) {
