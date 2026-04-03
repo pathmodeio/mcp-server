@@ -142,6 +142,7 @@ IMPORTANT:
   - constraints: string[] (optional)
   - edgeCases: { scenario: string, expectedBehavior: string }[] (optional)
   - healthMetrics: string[] (optional)
+  - scope: { inScope?: string[], outOfScope?: string[] } (optional)
   - verification: { manualChecks?: string[], unitTests?: string[], e2eTests?: string[] } (optional)
 
 Now, start the conversation. If they haven't provided one yet, ask for the concrete evidence (quote, metric, or ticket) driving this work.`;

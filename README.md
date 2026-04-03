@@ -257,7 +257,7 @@ Full privacy policy: [pathmode.io/privacy](https://pathmode.io/privacy)
 ## Links
 
 - [Intent Compiler page](https://pathmode.io/intent-compiler) — Overview and setup guide
-- [Try in browser](https://pathmode.io/sandbox) — Interactive sandbox, no install needed
+- [Intent Compiler](https://pathmode.io/intent-compiler) — Interactive setup and product overview
 - [Pathmode](https://pathmode.io) — Full platform for teams
 - [Issues](https://github.com/pathmodeio/mcp-server/issues)
 

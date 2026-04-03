@@ -68,9 +68,13 @@ const isLocalMode = process.argv.includes('--local');
 
 let client: PathmodeClient | null = null;
 
+const isDebug = process.env.PATHMODE_MCP_DEBUG === '1';
+
 if (!isLocalMode) {
     const config = loadConfig();
-    console.error(`[pathmode-mcp] API key present: ${!!config?.apiKey}, prefix: ${config?.apiKey?.substring(0, 16) || 'none'}, url: ${config?.apiUrl || 'none'}`);
+    if (isDebug) {
+        console.error(`[pathmode-mcp] API key present: ${!!config?.apiKey}, url: ${config?.apiUrl || 'none'}`);
+    }
     if (config) {
         client = new PathmodeClient(config);
     }
@@ -83,12 +87,28 @@ if (!isLocalMode) {
 
 const server = new McpServer({
     name: 'pathmode',
-    version: '1.3.0',
+    version: '1.4.4',
 });
 
 // Annotation presets
 const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 const WRITE_OP = { readOnlyHint: false, destructiveHint: false, openWorldHint: true } as const;
+
+// Cloud-mode guard — returns a clean error instead of crashing on client!
+const CLOUD_REQUIRED_MSG = 'This tool requires a Pathmode API key. Run `npx @pathmode/mcp-server setup pm_live_xxx` to connect, or set the PATHMODE_API_KEY environment variable.';
+
+function requireCloudClient(): PathmodeClient {
+    if (!client) throw new CloudClientError();
+    return client;
+}
+
+class CloudClientError extends Error {
+    constructor() { super(CLOUD_REQUIRED_MSG); this.name = 'CloudClientError'; }
+}
+
+// Note: The MCP SDK catches errors thrown in tool handlers and returns them as
+// error text results. CloudClientError thrown by requireCloudClient() will
+// surface its message to the client without crashing the server.
 
 // ============================================================
 // Tools — Read Operations
@@ -113,9 +133,10 @@ server.registerTool(
             return { content: [{ type: 'text', text: JSON.stringify(current, null, 2) }] };
         }
 
-        const intents = await client!.listIntents(status || 'approved');
+        const cloud = requireCloudClient();
+        const intents = await cloud.listIntents(status || 'approved');
         if (intents.length === 0) {
-            const allIntents = await client!.listIntents();
+            const allIntents = await cloud.listIntents();
             if (allIntents.length === 0) {
                 return { content: [{ type: 'text', text: 'No intents found in workspace.' }] };
             }
@@ -145,7 +166,8 @@ server.registerTool(
             };
         }
 
-        const intents = await client!.listIntents(status);
+        const cloud = requireCloudClient();
+        const intents = await cloud.listIntents(status);
         return {
             content: [{
                 type: 'text',
@@ -174,7 +196,7 @@ server.registerTool(
         }
 
         try {
-            const intent = await client!.getIntent(intentId);
+            const intent =  await requireCloudClient().getIntent(intentId);
             return { content: [{ type: 'text', text: JSON.stringify(intent, null, 2) }] };
         } catch (e: any) {
             return { content: [{ type: 'text', text: `Failed to fetch intent: ${e.message}` }] };
@@ -195,7 +217,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Relations are not available in local mode.' }] };
         }
 
-        const intent = await client!.getIntent(intentId);
+        const intent =  await requireCloudClient().getIntent(intentId);
         return {
             content: [{
                 type: 'text',
@@ -232,7 +254,7 @@ server.registerTool(
         }
 
         try {
-            const intents = await client!.listIntents(status);
+            const intents =  await requireCloudClient().listIntents(status);
             const q = query.toLowerCase();
             const matches = intents.filter(i => {
                 const text = [i.title, i.objective, ...(i.outcomes || []).map((o: any) => typeof o === 'string' ? o : o.text), ...(i.constraints || [])].join(' ').toLowerCase();
@@ -269,7 +291,7 @@ server.registerTool(
         }
 
         try {
-            const intents = await client!.listIntents();
+            const intents =  await requireCloudClient().listIntents();
             if (intents.length === 0) {
                 return { content: [{ type: 'text', text: 'No intents found in workspace.' }] };
             }
@@ -297,30 +319,45 @@ server.registerTool(
                 }
             }
 
-            // Detect cycles
+            // Detect cycles (iterative DFS with neighbor iterators)
             const WHITE = 0, GRAY = 1, BLACK = 2;
             const color = new Map<string, number>();
             const parent = new Map<string, string | null>();
             const cycles: string[][] = [];
             for (const id of forward.keys()) color.set(id, WHITE);
+
             for (const startId of forward.keys()) {
                 if (color.get(startId) !== WHITE) continue;
-                const stack: string[] = [startId];
+                // Each stack frame: [nodeId, iterator over its neighbors]
+                const stack: [string, Iterator<string>][] = [];
+                color.set(startId, GRAY);
                 parent.set(startId, null);
+                stack.push([startId, (forward.get(startId) || new Set()).values()]);
+
                 while (stack.length > 0) {
-                    const id = stack[stack.length - 1];
-                    if (color.get(id) === WHITE) {
-                        color.set(id, GRAY);
-                        for (const dep of forward.get(id) || new Set()) {
-                            if (color.get(dep) === WHITE) { parent.set(dep, id); stack.push(dep); }
-                            else if (color.get(dep) === GRAY) {
-                                const cycle: string[] = [dep];
-                                let cur = id;
-                                while (cur !== dep) { cycle.push(cur); cur = parent.get(cur)!; }
-                                cycle.push(dep); cycle.reverse(); cycles.push(cycle);
-                            }
+                    const [id, iter] = stack[stack.length - 1];
+                    const next = iter.next();
+
+                    if (!next.done) {
+                        const dep = next.value;
+                        if (color.get(dep) === WHITE) {
+                            color.set(dep, GRAY);
+                            parent.set(dep, id);
+                            stack.push([dep, (forward.get(dep) || new Set()).values()]);
+                        } else if (color.get(dep) === GRAY) {
+                            // Back edge — extract cycle from parent chain
+                            const cycle: string[] = [dep];
+                            let cur = id;
+                            while (cur !== dep) { cycle.push(cur); cur = parent.get(cur)!; }
+                            cycle.push(dep);
+                            cycle.reverse();
+                            cycles.push(cycle);
                         }
-                    } else { color.set(id, BLACK); stack.pop(); }
+                    } else {
+                        // All neighbors explored — mark finished
+                        color.set(id, BLACK);
+                        stack.pop();
+                    }
                 }
             }
 
@@ -431,7 +468,7 @@ server.registerTool(
         }
 
         try {
-            const content = await client!.exportContext(format, intentId, productId);
+            const content =  await requireCloudClient().exportContext(format, intentId, productId);
             return { content: [{ type: 'text', text: content }] };
         } catch (e: any) {
             return { content: [{ type: 'text', text: `Export failed: ${e.message}` }] };
@@ -455,7 +492,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Agent prompts require cloud mode for full context generation.' }] };
         }
 
-        const result = await client!.getIntentPrompt(intentId, 'claude-code', mode || 'execute');
+        const result =  await requireCloudClient().getIntentPrompt(intentId, 'claude-code', mode || 'execute');
         return {
             content: [{
                 type: 'text',
@@ -477,7 +514,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Workspace details are not available in local mode.' }] };
         }
 
-        const workspace = await client!.getWorkspace();
+        const workspace =  await requireCloudClient().getWorkspace();
         return {
             content: [{
                 type: 'text',
@@ -499,7 +536,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Constitution rules are not available in local mode.' }] };
         }
 
-        const result = await client!.getConstitution();
+        const result =  await requireCloudClient().getConstitution();
         return {
             content: [{
                 type: 'text',
@@ -529,7 +566,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Status updates are not available in local mode. Use cloud mode.' }] };
         }
 
-        const result = await client!.updateIntentStatus(intentId, status);
+        const result =  await requireCloudClient().updateIntentStatus(intentId, status);
 
         let responseText = `Intent ${intentId} status updated to "${status}".`;
 
@@ -567,7 +604,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Notes are not available in local mode. Use cloud mode.' }] };
         }
 
-        const result = await client!.logNote(intentId, note, 'mcp');
+        const result =  await requireCloudClient().logNote(intentId, note, 'mcp');
         return {
             content: [{
                 type: 'text',
@@ -607,7 +644,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Creating intents requires cloud mode. Use PATHMODE_API_KEY to connect.' }] };
         }
 
-        const result = await client!.createIntent({ productId, ...rest });
+        const result =  await requireCloudClient().createIntent({ productId, ...rest });
         return {
             content: [{
                 type: 'text',
@@ -647,7 +684,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Updating intents requires cloud mode.' }] };
         }
 
-        const result = await client!.updateIntent(intentId, updates);
+        const result =  await requireCloudClient().updateIntent(intentId, updates);
         const changedFields = Object.keys(updates).filter(k => (updates as any)[k] !== undefined);
         return {
             content: [{
@@ -678,7 +715,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Evidence queries require cloud mode.' }] };
         }
 
-        const result = await client!.queryEvidence(filters);
+        const result =  await requireCloudClient().queryEvidence(filters);
         return {
             content: [{
                 type: 'text',
@@ -702,7 +739,7 @@ server.registerTool(
             severity: z.enum(['low', 'medium', 'high', 'critical']).optional().describe('Severity level (required for friction type)'),
             sentiment: z.enum(['positive', 'negative', 'neutral', 'mixed']).optional().describe('Emotional sentiment'),
             tags: z.array(z.string()).optional().describe('Category tags (e.g., ["Onboarding", "Performance"])'),
-            stage: z.string().optional().describe('User journey stage (e.g., "Discovery", "Checkout")'),
+            stage: z.string().optional().describe('Workflow stage (e.g., "Discovery", "Checkout")'),
         },
         annotations: WRITE_OP,
     },
@@ -711,7 +748,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Creating evidence requires cloud mode.' }] };
         }
 
-        const result = await client!.createEvidence({ productId, ...rest });
+        const result =  await requireCloudClient().createEvidence({ productId, ...rest });
         return {
             content: [{
                 type: 'text',
@@ -738,7 +775,7 @@ server.registerTool(
             return { content: [{ type: 'text', text: 'Evidence linking requires cloud mode.' }] };
         }
 
-        const result = await client!.linkEvidence(intentId, { link, unlink });
+        const result =  await requireCloudClient().linkEvidence(intentId, { link, unlink });
         const actions: string[] = [];
         if (link && link.length > 0) actions.push(`linked ${result.linked} evidence items`);
         if (unlink && unlink.length > 0) actions.push(`unlinked ${result.unlinked} evidence items`);
@@ -769,7 +806,7 @@ server.registerTool(
         }
 
         try {
-            const result = await client!.verifyImplementation(intentId, summary, codeChanges);
+            const result =  await requireCloudClient().verifyImplementation(intentId, summary, codeChanges);
 
             let text = `Verification ${result.pass ? 'PASSED' : 'FAILED'} (score: ${result.score}/100)\n\n`;
             text += `${result.summary}\n\n`;
@@ -874,6 +911,10 @@ const intentSpecSchema = {
         expectedBehavior: z.string(),
     })).optional().describe('Failure modes and boundary conditions'),
     healthMetrics: z.array(z.string()).optional().describe('What to monitor after shipping'),
+    scope: z.object({
+        inScope: z.array(z.string()).optional().describe('What is in scope for this intent'),
+        outOfScope: z.array(z.string()).optional().describe('What is explicitly out of scope'),
+    }).optional().describe('Scope boundaries — what to build and what to avoid'),
     verification: z.object({
         manualChecks: z.array(z.string()).optional(),
         unitTests: z.array(z.string()).optional(),
@@ -977,15 +1018,26 @@ server.resource(
             };
         }
 
-        const intents = await client!.listIntents('approved');
-        const current = intents[0] || (await client!.listIntents())[0] || null;
-        return {
-            contents: [{
-                uri: uri.href,
-                mimeType: 'application/json',
-                text: JSON.stringify(current, null, 2),
-            }]
-        };
+        try {
+            const cloud = requireCloudClient();
+            const intents = await cloud.listIntents('approved');
+            const current = intents[0] || (await cloud.listIntents())[0] || null;
+            return {
+                contents: [{
+                    uri: uri.href,
+                    mimeType: 'application/json',
+                    text: JSON.stringify(current, null, 2),
+                }]
+            };
+        } catch {
+            return {
+                contents: [{
+                    uri: uri.href,
+                    mimeType: 'application/json',
+                    text: JSON.stringify({ error: CLOUD_REQUIRED_MSG }),
+                }]
+            };
+        }
     }
 );
 
@@ -1003,21 +1055,31 @@ server.resource(
             };
         }
 
-        const intents = await client!.listIntents();
-        const graph = intents.map(i => ({
-            id: i.id,
-            title: i.title,
-            status: i.status,
-            relations: i.relations,
-        }));
+        try {
+            const intents = await requireCloudClient().listIntents();
+            const graph = intents.map(i => ({
+                id: i.id,
+                title: i.title,
+                status: i.status,
+                relations: i.relations,
+            }));
 
-        return {
-            contents: [{
-                uri: uri.href,
-                mimeType: 'application/json',
-                text: JSON.stringify(graph, null, 2),
-            }]
-        };
+            return {
+                contents: [{
+                    uri: uri.href,
+                    mimeType: 'application/json',
+                    text: JSON.stringify(graph, null, 2),
+                }]
+            };
+        } catch {
+            return {
+                contents: [{
+                    uri: uri.href,
+                    mimeType: 'application/json',
+                    text: JSON.stringify({ error: CLOUD_REQUIRED_MSG }),
+                }]
+            };
+        }
     }
 );
 
@@ -1036,7 +1098,7 @@ server.resource(
         }
 
         try {
-            const workspace = await client!.getWorkspace();
+            const workspace =  await requireCloudClient().getWorkspace();
             return {
                 contents: [{
                     uri: uri.href,
@@ -1075,4 +1137,3 @@ main().catch((error) => {
 });
 
 } // end startMcpServer()
-

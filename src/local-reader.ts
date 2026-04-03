@@ -19,6 +19,7 @@ export interface LocalIntent {
     constraints: string[];
     edgeCases: { scenario: string; expectedBehavior: string }[];
     healthMetrics: string[];
+    scope?: { inScope?: string[]; outOfScope?: string[] };
     verification: Record<string, any>;
     source: 'local';
 }
@@ -62,6 +63,14 @@ function readIntentFile(filePath: string): LocalIntent | null {
         const constraints = extractListSection(body, 'Constraints');
         const healthMetrics = extractListSection(body, 'Health Metrics');
         const edgeCases = extractEdgeCases(body);
+        const scope = extractScope(body);
+        const parsedVerification = extractVerification(body);
+        const frontmatterVerification = data.verification && typeof data.verification === 'object'
+            ? data.verification
+            : null;
+        const verification = Object.keys(parsedVerification).length > 0
+            ? parsedVerification
+            : (frontmatterVerification || {});
 
         return {
             id: data.id || path.basename(filePath, '.md'),
@@ -75,7 +84,8 @@ function readIntentFile(filePath: string): LocalIntent | null {
             constraints,
             edgeCases,
             healthMetrics,
-            verification: data.verification || {},
+            scope: scope || undefined,
+            verification,
             source: 'local',
         };
     } catch (e) {
@@ -133,4 +143,55 @@ function extractEdgeCases(body: string): { scenario: string; expectedBehavior: s
     }
 
     return cases;
+}
+
+/**
+ * Extract Scope section with **In scope:** and **Out of scope:** sub-lists.
+ * Matches the format emitted by formatIntentMd().
+ */
+function extractScope(body: string): { inScope?: string[]; outOfScope?: string[] } | null {
+    const section = extractSection(body, 'Scope');
+    if (!section) return null;
+
+    const inScope: string[] = [];
+    const outOfScope: string[] = [];
+    let target: string[] | null = null;
+
+    for (const line of section.split('\n')) {
+        if (/^\*\*In scope[:\*]*/.test(line.trim())) { target = inScope; continue; }
+        if (/^\*\*Out of scope[:\*]*/.test(line.trim())) { target = outOfScope; continue; }
+        if (target && line.match(/^[-*]\s/)) {
+            target.push(line.replace(/^[-*]\s+/, '').trim());
+        }
+    }
+
+    if (inScope.length === 0 && outOfScope.length === 0) return null;
+    const result: { inScope?: string[]; outOfScope?: string[] } = {};
+    if (inScope.length > 0) result.inScope = inScope;
+    if (outOfScope.length > 0) result.outOfScope = outOfScope;
+    return result;
+}
+
+/**
+ * Extract Verification section with **E2E Tests**, **Unit Tests**, **Manual Checks** sub-lists.
+ * Matches the format emitted by formatIntentMd().
+ */
+function extractVerification(body: string): Record<string, string[]> {
+    const section = extractSection(body, 'Verification');
+    if (!section) return {};
+
+    const result: Record<string, string[]> = {};
+    let currentKey: string | null = null;
+
+    for (const line of section.split('\n')) {
+        const trimmed = line.trim();
+        if (/^\*\*E2E Tests?\*?\*?:?/.test(trimmed)) { currentKey = 'e2eTests'; result[currentKey] = []; continue; }
+        if (/^\*\*Unit Tests?\*?\*?:?/.test(trimmed)) { currentKey = 'unitTests'; result[currentKey] = []; continue; }
+        if (/^\*\*Manual Checks?\*?\*?:?/.test(trimmed)) { currentKey = 'manualChecks'; result[currentKey] = []; continue; }
+        if (currentKey && trimmed.match(/^[-*]\s/)) {
+            result[currentKey].push(trimmed.replace(/^[-*]\s+(\[.\]\s+)?/, '').trim());
+        }
+    }
+
+    return result;
 }

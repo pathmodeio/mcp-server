@@ -7,6 +7,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+const isDebug = process.env.PATHMODE_MCP_DEBUG === '1';
+
 export interface PathmodeConfig {
     apiKey: string;
     apiUrl: string;
@@ -23,8 +25,6 @@ export interface ApiIntent {
     id: string;
     workspaceId: string;
     productId?: string;
-    journeyId?: string;
-    stageId?: string;
     stageName?: string;
     status: string;
     version: number;
@@ -203,7 +203,7 @@ export class PathmodeClient {
 
     private async fetch(path: string, options: RequestInit = {}): Promise<Response> {
         const url = `${this.apiUrl}/api/v1${path}`;
-        console.error(`[pathmode-mcp] fetch: ${url}, key prefix: ${this.apiKey.substring(0, 16)}`);
+        if (isDebug) console.error(`[pathmode-mcp] fetch: ${url}`);
         const response = await fetch(url, {
             ...options,
             headers: {
@@ -215,7 +215,7 @@ export class PathmodeClient {
 
         if (!response.ok) {
             const body = await response.json().catch(() => ({ error: response.statusText })) as { error?: string };
-            console.error(`[pathmode-mcp] ${response.status}: ${JSON.stringify(body)}, key length: ${this.apiKey.length}`);
+            console.error(`[pathmode-mcp] API error ${response.status}: ${body.error || response.statusText}`);
             throw new Error(`API error (${response.status}): ${body.error || response.statusText}`);
         }
 

@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "pathmode",
   "display_name": "Pathmode",
-  "version": "1.4.0",
+  "version": "1.4.4",
   "description": "Build structured intent specs through Socratic AI conversation, or connect to your Intent Layer for strategic context and dependency graphs.",
   "long_description": "Pathmode MCP Server includes the Intent Compiler — a zero-config Socratic conversation that helps you build structured intent specs (objectives, outcomes, constraints, edge cases) right in Claude Code. No signup needed. For teams, connect to your Pathmode workspace for dependency graph analysis (critical path, bottlenecks, cycles), workspace strategy context, and governance — so AI agents build the right thing, not just any thing.",
   "author": {
