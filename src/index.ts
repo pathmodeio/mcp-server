@@ -5,9 +5,11 @@
  * Connects Claude Code, Cursor, and other AI agents to your Intent Layer.
  *
  * Usage:
- *   npx @pathmode/mcp-server                    # Cloud mode (uses ~/.pathmode/config.json)
- *   npx @pathmode/mcp-server --local             # Local mode (reads intent.md from cwd)
- *   npx @pathmode/mcp-server setup pm_live_xxx   # Auto-configure your tools
+ *   npx @pathmode/mcp-server                       # Cloud mode (uses ~/.pathmode/config.json)
+ *   npx @pathmode/mcp-server --local                # Local mode (reads intent.md from cwd)
+ *   npx @pathmode/mcp-server setup pm_live_xxx      # Auto-configure your tools
+ *   npx @pathmode/mcp-server install-skills         # Copy the skill pack into .claude/skills/
+ *   npx @pathmode/mcp-server install-skills --global  # Install into ~/.claude/skills/ instead
  *
  * The Intent Compiler (compile-intent prompt, intent_save, intent_export tools)
  * works without an API key — zero-config intent spec building in Claude Code.
@@ -46,13 +48,19 @@ import { PathmodeClient, loadConfig } from './api-client';
 import { readLocalIntents } from './local-reader';
 import { getCompileIntentPrompt, formatIntentMd, formatCursorRules, formatClaudeMdSection } from './intent-compiler';
 import { isSetupCommand, runSetup } from './setup';
+import { isInstallSkillsCommand, runInstallSkills } from './install-skills';
 
 // ─── Subcommand routing ───────────────────────────────────────
-// `setup` uses stdout for human-readable output and must run
-// before StdioServerTransport claims stdout for JSON-RPC.
-// We call startMcpServer() only when NOT in setup mode.
+// Human-readable subcommands (`setup`, `install-skills`) use stdout
+// and must run before StdioServerTransport claims stdout for JSON-RPC.
+// We call startMcpServer() only when NOT in a subcommand.
 if (isSetupCommand()) {
     runSetup().then(() => process.exit(0)).catch((err) => {
+        console.error(err);
+        process.exit(1);
+    });
+} else if (isInstallSkillsCommand()) {
+    runInstallSkills().then(() => process.exit(0)).catch((err) => {
         console.error(err);
         process.exit(1);
     });
@@ -87,7 +95,7 @@ if (!isLocalMode) {
 
 const server = new McpServer({
     name: 'pathmode',
-    version: '1.4.4',
+    version: '1.4.5',
 });
 
 // Annotation presets
@@ -106,6 +114,31 @@ class CloudClientError extends Error {
     constructor() { super(CLOUD_REQUIRED_MSG); this.name = 'CloudClientError'; }
 }
 
+function normalizeText(value: string | null | undefined): string {
+    return (value || '').trim();
+}
+
+// Keep this selection heuristic aligned with the canonical readiness rules in
+// /Users/jannelammi/code/Pathmode/lib/intentReadiness.ts. The MCP package cannot
+// import app/lib code directly, so this mirrors only the minimum logic needed
+// for get_current_intent fallback behavior.
+function isPlaceholderIntent(intent: any): boolean {
+    const title = normalizeText(intent.title).toLowerCase();
+    const objective = normalizeText(intent.objective);
+    const outcomeCount = (intent.outcomes || []).filter((outcome: any) => normalizeText(typeof outcome === 'string' ? outcome : outcome?.text).length > 0).length;
+    return title === 'new intent' || title === 'untitled intent' || objective.length < 15 || outcomeCount === 0;
+}
+
+function pickCurrentIntent(intents: any[]): any | undefined {
+    const approvedReady = intents.find((intent) => intent.status === 'approved' && !isPlaceholderIntent(intent));
+    if (approvedReady) return approvedReady;
+
+    const anyReady = intents.find((intent) => !isPlaceholderIntent(intent));
+    if (anyReady) return anyReady;
+
+    return intents[0];
+}
+
 // Note: The MCP SDK catches errors thrown in tool handlers and returns them as
 // error text results. CloudClientError thrown by requireCloudClient() will
 // surface its message to the client without crashing the server.
@@ -118,7 +151,7 @@ server.registerTool(
     'get_current_intent',
     {
         title: 'Get Current Intent',
-        description: 'Get the currently active intent (first approved, or most recently updated). Returns the full IntentSpec with objective, outcomes, constraints, and edge cases.',
+        description: 'Get the currently active intent, preferring approved intents with real objective/outcome content over empty stubs. Returns the full IntentSpec with objective, outcomes, constraints, and edge cases.',
         inputSchema: { status: z.string().optional().describe('Filter by status: draft, validated, approved, shipped, verified') },
         annotations: READ_ONLY,
     },
@@ -126,7 +159,7 @@ server.registerTool(
         if (isLocalMode) {
             const intents = readLocalIntents();
             const filtered = status ? intents.filter(i => i.status === status) : intents;
-            const current = filtered[0];
+            const current = pickCurrentIntent(filtered);
             if (!current) {
                 return { content: [{ type: 'text', text: 'No intents found locally.' }] };
             }
@@ -140,9 +173,9 @@ server.registerTool(
             if (allIntents.length === 0) {
                 return { content: [{ type: 'text', text: 'No intents found in workspace.' }] };
             }
-            return { content: [{ type: 'text', text: JSON.stringify(allIntents[0], null, 2) }] };
+            return { content: [{ type: 'text', text: JSON.stringify(pickCurrentIntent(allIntents), null, 2) }] };
         }
-        return { content: [{ type: 'text', text: JSON.stringify(intents[0], null, 2) }] };
+        return { content: [{ type: 'text', text: JSON.stringify(pickCurrentIntent(intents), null, 2) }] };
     }
 );
 

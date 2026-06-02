@@ -41,6 +41,16 @@ export interface ApiIntent {
     verification: Record<string, any>;
     externalLinks: any[];
     evidenceAnchors: Record<string, string[]>;
+    implementationContext?: {
+        relevantAreas: { path: string; reason: string }[];
+        currentBehavior: string;
+        liftEstimate: 'low' | 'medium' | 'high';
+        risks: string[];
+        verificationSuggestions: string[];
+        analyzedAt: string;
+        analyzedRepo: { provider: 'github'; owner: string; name: string; ref: string };
+        analyzedSpecVersion: string;
+    } | null;
     createdAt: string;
     updatedAt: string;
     shippedAt?: string;

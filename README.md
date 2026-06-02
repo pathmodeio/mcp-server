@@ -92,6 +92,29 @@ Your implementation MUST satisfy ALL of these:
 
 **CLAUDE.md** — Appends a `<!-- PATHMODE:START -->` section so Claude Code sees the intent in every conversation.
 
+## Skill Pack for Claude Code
+
+The package also ships 7 Claude Code skills that auto-trigger based on what you ask — no slash commands required.
+
+| Skill | Use when |
+|-------|----------|
+| `setup-pathmode-workflow` | First-time project setup (test commands, issue tracker, status conventions) |
+| `compile-intent` | Building a structured spec for what to ship |
+| `verify-intent` | Designing the executable feedback loop for a spec |
+| `grill-intent` | Stress-testing an existing spec for weaknesses |
+| `split-intent-to-issues` | Breaking a spec into Linear / Jira / GitHub Issues tickets |
+| `review-against-intent` | Checking code changes against intent outcomes |
+| `handoff-intent` | Capturing decisions at end of session |
+
+Install after running the MCP setup:
+
+```bash
+npx @pathmode/mcp-server install-skills            # project-local (.claude/skills/)
+npx @pathmode/mcp-server install-skills --global   # global (~/.claude/skills/)
+```
+
+Restart Claude Code. The skills register at session start and auto-invoke when your request matches their description. See [`skills/README.md`](./skills/README.md) for details.
+
 ### Intent Compiler Tools
 
 | Tool | Description |
