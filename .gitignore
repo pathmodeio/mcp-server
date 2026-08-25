@@ -1,9 +1,0 @@
-node_modules/
-dist/
-*.tgz
-*.mcpb
-
-# MCP Registry publisher
-mcp-publisher
-mcp-publisher_*.tar.gz
-.mcpregistry_*
