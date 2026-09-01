@@ -2,6 +2,8 @@
 
 Deterministic intent preflight before your agent builds: six calibrated gates, keyless, no model call.
 
+This repository dogfoods the same workflow: [read its intent.md](intent.md).
+
 **This repository is the issue tracker for the package, not its source.** The server is developed in
 Pathmode's private monorepo and published to npm from there. This repo previously held a hand-copied
 snapshot of the source, which drifted several versions behind the published package. It no longer
