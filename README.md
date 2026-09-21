@@ -39,6 +39,9 @@ No account and no API key. Specs live in `intent.md` in your repo, as plain mark
 - [IntentSpec](https://intentspec.org/spec): the open specification for the `intent.md` files this server writes
 - [The intent.md profile](https://intentspec.org/intent-md): the six checks `check_intent_readiness` scores against
 - [Pathmode](https://pathmode.io): the platform for teams
+- Listed in the [MCP registry](https://registry.modelcontextprotocol.io/v0/servers?search=pathmode)
+  and on [Smithery](https://smithery.ai/servers/pathmodeio/mcp-server), which carries the same
+  server as a local bundle that runs the build it ships instead of fetching from npm at launch
 
 ## Issues
 
