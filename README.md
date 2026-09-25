@@ -1,6 +1,7 @@
 # @pathmode/mcp-server
 
-Deterministic intent preflight before your agent builds: six calibrated gates, keyless, no model call.
+Find the product decisions a request leaves open, before your coding agent builds. A deterministic
+preflight: six calibrated checks, keyless, no model call.
 
 This repository dogfoods the same workflow: [read its intent.md](intent.md).
 
@@ -32,6 +33,16 @@ Add to `.mcp.json` in your project root:
 
 No account and no API key. Specs live in `intent.md` in your repo, as plain markdown you own. Set
 `PATHMODE_API_KEY` to sync intent and evidence across a team.
+
+## See it work
+
+Given one instruction, `implement FN-412`, in [Fieldnote](https://github.com/pathmodeio/fieldnote)
+(a fictional billing app whose ticket asks for a `Cancel plan` button), an agent with this server
+wrote no product code. It found that the only cancel code in the repository was written for
+refunds and would take paid days away from every customer who cancels, drafted an `intent.md` with
+four open product choices, and stopped: preflight passed 6/6, still blocked by those choices.
+[The recorded run](https://github.com/pathmodeio/fieldnote/blob/run-4/fn-412-keyless-proposal/RUN.md)
+lists every tool call, and `npx -y @pathmode/cli preflight` on that branch reproduces the verdict.
 
 ## Links
 
